@@ -1,31 +1,43 @@
-import { Application, Router } from "https://deno.land/x/oak@v11.1.0/mod.ts";
-import { oakCors } from "https://deno.land/x/cors@v1.2.2/mod.ts";
-import data from "./data.json" assert { type: "json" };
-
-const router = new Router();
-router
-  .get("/", (context) => {
-    context.response.body = "Welcome to dinosaur API!";
-  })
-  .get("/api", (context) => {
-    context.response.body = data;
-  })
-  .get("/api/:dinosaur", (context) => {
-    if (context?.params?.dinosaur) {
-      const found = data.find((item) =>
-        item.name.toLowerCase() === context.params.dinosaur.toLowerCase()
-      );
-      if (found) {
-        context.response.body = found;
-      } else {
-        context.response.body = "No dinosaurs found.";
-      }
-    }
-  });
+import { Application, Router, oakCors } from './deps.ts';
+import { handleWebSocket } from './websocket.ts';
 
 const app = new Application();
-app.use(oakCors()); // Enable CORS for All Routes
+const router = new Router();
+
+// deno-lint-ignore no-explicit-any
+const log = (...args: any[]) => console.log(new Date(), ...args);
+
+router.get('/api/websocket', handleWebSocket);
+
+router.get('/', (ctx) => {
+  const body = {
+    code: 200,
+    data: Deno.version,
+    message: 'Hello world from Deno! Try `GET /echo` on this server.',
+  };
+
+  ctx.response.body = JSON.stringify(body);
+  ctx.response.headers.set('Content-Type', 'application/json');
+});
+
+router.all('/echo', async (ctx) => {
+  ctx.response.body = {
+    method: ctx.request.method,
+    args: Object.fromEntries(ctx.request.url.searchParams.entries()),
+    data: (await ctx.request.body().value) ?? '',
+    headers: Object.fromEntries(ctx.request.headers.entries()),
+    path: ctx.request.url.pathname,
+    url: ctx.request.url.toString(),
+  };
+
+  log(ctx.response.body);
+});
+
+app.use(oakCors());
 app.use(router.routes());
 app.use(router.allowedMethods());
 
-await app.listen({ port: 8000 });
+const PORT = parseInt(Deno.env.get('PORT') || '8000', 10);
+
+log('Server listening on http://localhost:' + PORT);
+await app.listen({ hostname: '0.0.0.0', port: PORT });
